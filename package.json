@@ -1,0 +1,27 @@
+{
+  "name": "whatsapp-manager",
+  "version": "1.0.0",
+  "description": "Administrador moderno de grupos y canales de WhatsApp",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:backend": "cd backend && pnpm run dev",
+    "dev:frontend": "cd frontend && pnpm run dev",
+    "dev": "concurrently \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
+    "install:all": "pnpm install -r",
+    "build:frontend": "cd frontend && pnpm run build",
+    "start:backend": "cd backend && pnpm start",
+    "start:frontend": "cd frontend && pnpm start"
+  },
+  "keywords": [
+    "whatsapp",
+    "manager",
+    "admin",
+    "nextjs",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
