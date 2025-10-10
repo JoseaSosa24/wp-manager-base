@@ -9,30 +9,47 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 interface SendMessageParams {
   chatId: string
   message: string
+  file?: File | null
+  linkPreview?: boolean
 }
 
 interface BulkMessageParams {
   recipients: string[]
   message: string
+  file?: File | null
+  linkPreview?: boolean
 }
 
 interface MentionAllParams {
   groupId: string
   message: string
+  file?: File | null
+  linkPreview?: boolean
 }
 
 export const useMessages = () => {
   const [loading, setLoading] = useState(false)
 
-  const sendMessage = async ({ chatId, message }: SendMessageParams) => {
+  const sendMessage = async ({ chatId, message, file, linkPreview = true }: SendMessageParams) => {
     setLoading(true)
     try {
-      const response = await axios.post(`${API_URL}/api/messages/send`, {
-        chatId,
-        message
+      const formData = new FormData()
+      formData.append('chatId', chatId)
+      formData.append('message', message || '')
+      formData.append('linkPreview', linkPreview.toString())
+
+      if (file) {
+        formData.append('file', file)
+      }
+
+      const response = await axios.post(`${API_URL}/api/messages/send`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       })
 
-      toast.success('Mensaje enviado correctamente')
+      const successMsg = file ? 'Mensaje con archivo enviado correctamente' : 'Mensaje enviado correctamente'
+      toast.success(successMsg)
       return response.data
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Error al enviar mensaje')
@@ -42,15 +59,29 @@ export const useMessages = () => {
     }
   }
 
-  const sendBulkMessages = async ({ recipients, message }: BulkMessageParams) => {
+  const sendBulkMessages = async ({ recipients, message, file, linkPreview = true }: BulkMessageParams) => {
     setLoading(true)
     try {
-      const response = await axios.post(`${API_URL}/api/messages/bulk`, {
-        recipients,
-        message
+      const formData = new FormData()
+      formData.append('recipients', JSON.stringify(recipients))
+      formData.append('message', message || '')
+      formData.append('linkPreview', linkPreview.toString())
+
+      if (file) {
+        formData.append('file', file)
+      }
+
+      const response = await axios.post(`${API_URL}/api/messages/bulk`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       })
 
-      toast.success(`Mensajes enviados: ${response.data.data.successful}/${response.data.data.total}`)
+      const successMsg = file
+        ? `Mensajes con archivo enviados: ${response.data.data.successful}/${response.data.data.total}`
+        : `Mensajes enviados: ${response.data.data.successful}/${response.data.data.total}`
+
+      toast.success(successMsg)
       return response.data
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Error al enviar mensajes')
@@ -60,15 +91,30 @@ export const useMessages = () => {
     }
   }
 
-  const mentionAll = async ({ groupId, message }: MentionAllParams) => {
+  const mentionAll = async ({ groupId, message, file, linkPreview = true }: MentionAllParams) => {
     setLoading(true)
     try {
-      const response = await axios.post(`${API_URL}/api/messages/mention-all`, {
-        groupId,
-        message
+      const formData = new FormData()
+      formData.append('groupId', groupId)
+      formData.append('message', message || '')
+      formData.append('linkPreview', linkPreview.toString())
+
+      if (file) {
+        formData.append('file', file)
+      }
+
+      const response = await axios.post(`${API_URL}/api/messages/mention-all`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       })
 
-      toast.success(`Mención enviada a ${response.data.data.mentionedCount} participantes`)
+      const result = response.data.data
+      const successMsg = file
+        ? `Mensaje con archivo enviado a ${result.mentionedCount} participantes`
+        : `Mención enviada a ${result.mentionedCount} participantes`
+
+      toast.success(successMsg)
       return response.data
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Error al mencionar todos')
@@ -78,15 +124,26 @@ export const useMessages = () => {
     }
   }
 
-  const sendToChannel = async ({ channelId, message }: SendMessageParams) => {
+  const sendToChannel = async ({ chatId: channelId, message, file, linkPreview = true }: SendMessageParams) => {
     setLoading(true)
     try {
-      const response = await axios.post(`${API_URL}/api/messages/channel`, {
-        channelId,
-        message
+      const formData = new FormData()
+      formData.append('channelId', channelId)
+      formData.append('message', message || '')
+      formData.append('linkPreview', linkPreview.toString())
+
+      if (file) {
+        formData.append('file', file)
+      }
+
+      const response = await axios.post(`${API_URL}/api/messages/channel`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       })
 
-      toast.success('Mensaje enviado al canal')
+      const successMsg = file ? 'Mensaje con archivo enviado al canal' : 'Mensaje enviado al canal'
+      toast.success(successMsg)
       return response.data
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Error al enviar mensaje al canal')

@@ -4,6 +4,7 @@ import { useStats } from '@/hooks/useStats'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { Badge } from '@/components/Badge'
+import { Header } from '@/components/Header'
 import { ArrowLeft, TrendingUp, Send, AlertCircle, Users, Loader2, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
 import { formatDateTime } from '@/utils/formatTime'
@@ -44,6 +45,8 @@ export default function StatsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+      <Header />
+
       <div className="container mx-auto px-4 py-8">
         <Link href="/">
           <Button variant="ghost" className="mb-6">

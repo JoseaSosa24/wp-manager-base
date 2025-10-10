@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useGroups } from '@/hooks/useGroups'
 import { useMessages } from '@/hooks/useMessages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/Card'
@@ -9,26 +9,63 @@ import { Input } from '@/components/Input'
 import { Textarea } from '@/components/Textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/Table'
 import { Badge } from '@/components/Badge'
-import { ArrowLeft, Users, Send, Loader2, AtSign } from 'lucide-react'
+import { Header } from '@/components/Header'
+import { FileUploader } from '@/components/FileUploader'
+import { ArrowLeft, Users, Send, Loader2, AtSign, Link as LinkIcon, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { formatRelativeTime } from '@/utils/formatTime'
 
 export default function GroupsPage() {
   const { data: groups, isLoading, refetch } = useGroups()
-  const { mentionAll, loading } = useMessages()
+  const { mentionAll, loading, getLinkPreview } = useMessages()
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [linkPreview, setLinkPreview] = useState(true)
+  const [detectedLinks, setDetectedLinks] = useState<string[]>([])
+  const [preview, setPreview] = useState<any>(null)
+
+  // Detectar links en el mensaje
+  useEffect(() => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    const links = message.match(urlRegex) || []
+    setDetectedLinks(links)
+  }, [message])
+
+  const handlePreviewLink = async () => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    const urls = message.match(urlRegex)
+
+    if (urls && urls[0]) {
+      const previewData = await getLinkPreview(urls[0])
+      setPreview(previewData)
+    }
+  }
 
   const handleMentionAll = async () => {
-    if (!selectedGroup || !message) return
+    if (!selectedGroup) return
+    if (!message && !file) {
+      return // Necesita al menos mensaje o archivo
+    }
 
-    await mentionAll({ groupId: selectedGroup, message })
+    await mentionAll({
+      groupId: selectedGroup,
+      message,
+      file,
+      linkPreview
+    })
+
     setMessage('')
+    setFile(null)
     setSelectedGroup(null)
+    setDetectedLinks([])
+    setPreview(null)
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+      <Header />
+
       <div className="container mx-auto px-4 py-8">
         <Link href="/">
           <Button variant="ghost" className="mb-6">
@@ -134,7 +171,7 @@ export default function GroupsPage() {
 
                     <div>
                       <label className="text-sm font-medium mb-2 block">
-                        Mensaje
+                        Mensaje (opcional si adjuntas archivo)
                       </label>
                       <Textarea
                         placeholder="Escribe tu mensaje aquí..."
@@ -142,12 +179,85 @@ export default function GroupsPage() {
                         onChange={(e) => setMessage(e.target.value)}
                         rows={6}
                       />
+
+                      {detectedLinks.length > 0 && (
+                        <div className="mt-2 flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                          <LinkIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-blue-900 dark:text-blue-100">
+                              {detectedLinks.length} enlace{detectedLinks.length > 1 ? 's' : ''} detectado{detectedLinks.length > 1 ? 's' : ''}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <input
+                                type="checkbox"
+                                id="linkPreview"
+                                checked={linkPreview}
+                                onChange={(e) => setLinkPreview(e.target.checked)}
+                                className="rounded border-gray-300 text-primary focus:ring-primary"
+                              />
+                              <label htmlFor="linkPreview" className="text-xs text-blue-700 dark:text-blue-300 cursor-pointer">
+                                Mostrar vista previa
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handlePreviewLink}
+                          disabled={!message.match(/(https?:\/\/[^\s]+)/g)}
+                        >
+                          <LinkIcon className="w-3 h-3 mr-1" />
+                          Preview de links
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Preview de link */}
+                    {preview && (
+                      <Card className="bg-muted">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm">Preview del enlace</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {preview.image && (
+                            <img
+                              src={preview.image}
+                              alt={preview.title}
+                              className="w-full rounded-md max-h-48 object-cover"
+                            />
+                          )}
+                          <div>
+                            <p className="font-semibold">{preview.title}</p>
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {preview.description}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {preview.siteName || preview.url}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Archivo adjunto (opcional)
+                      </label>
+                      <FileUploader
+                        onFileSelect={setFile}
+                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+                        maxSize={50}
+                      />
                     </div>
 
                     <Button
                       className="w-full"
                       onClick={handleMentionAll}
-                      disabled={loading || !message}
+                      disabled={loading || (!message && !file)}
                     >
                       {loading ? (
                         <>
@@ -157,7 +267,7 @@ export default function GroupsPage() {
                       ) : (
                         <>
                           <Send className="w-4 h-4 mr-2" />
-                          Mencionar a todos
+                          {file ? 'Enviar con archivo' : 'Mencionar a todos'}
                         </>
                       )}
                     </Button>
@@ -168,6 +278,9 @@ export default function GroupsPage() {
                       onClick={() => {
                         setSelectedGroup(null)
                         setMessage('')
+                        setFile(null)
+                        setDetectedLinks([])
+                        setPreview(null)
                       }}
                     >
                       Cancelar

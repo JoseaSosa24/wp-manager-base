@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useChats } from '@/hooks/useGroups'
 import { useMessages } from '@/hooks/useMessages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/Card'
@@ -8,6 +8,8 @@ import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { Textarea } from '@/components/Textarea'
 import { Badge } from '@/components/Badge'
+import { Header } from '@/components/Header'
+import { FileUploader } from '@/components/FileUploader'
 import { ArrowLeft, Send, Loader2, MessageSquare, Users2, Link as LinkIcon } from 'lucide-react'
 import Link from 'next/link'
 
@@ -19,25 +21,37 @@ export default function MessagesPage() {
   const [chatId, setChatId] = useState('')
   const [recipients, setRecipients] = useState('')
   const [message, setMessage] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [linkPreview, setLinkPreview] = useState(true)
+  const [detectedLinks, setDetectedLinks] = useState<string[]>([])
   const [preview, setPreview] = useState<any>(null)
 
+  // Detectar links en el mensaje
+  useEffect(() => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    const links = message.match(urlRegex) || []
+    setDetectedLinks(links)
+  }, [message])
+
   const handleSend = async () => {
-    if (!message) return
+    if (!message && !file) return
 
     try {
       if (mode === 'single' && chatId) {
-        await sendMessage({ chatId, message })
+        await sendMessage({ chatId, message, file, linkPreview })
       } else if (mode === 'bulk' && recipients) {
         const recipientList = recipients.split('\n').filter(r => r.trim())
-        await sendBulkMessages({ recipients: recipientList, message })
+        await sendBulkMessages({ recipients: recipientList, message, file, linkPreview })
       } else if (mode === 'channel' && chatId) {
-        await sendToChannel({ channelId: chatId, message })
+        await sendToChannel({ chatId, message, file, linkPreview })
       }
 
       setMessage('')
       setChatId('')
       setRecipients('')
+      setFile(null)
       setPreview(null)
+      setDetectedLinks([])
     } catch (error) {
       console.error('Error al enviar:', error)
     }
@@ -55,6 +69,8 @@ export default function MessagesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+      <Header />
+
       <div className="container mx-auto px-4 py-8">
         <Link href="/">
           <Button variant="ghost" className="mb-6">
@@ -151,13 +167,39 @@ export default function MessagesPage() {
 
               {/* Mensaje */}
               <div>
-                <label className="text-sm font-medium mb-2 block">Mensaje</label>
+                <label className="text-sm font-medium mb-2 block">
+                  Mensaje (opcional si adjuntas archivo)
+                </label>
                 <Textarea
                   placeholder="Escribe tu mensaje aquí..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={8}
                 />
+
+                {detectedLinks.length > 0 && (
+                  <div className="mt-2 flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <LinkIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-blue-900 dark:text-blue-100">
+                        {detectedLinks.length} enlace{detectedLinks.length > 1 ? 's' : ''} detectado{detectedLinks.length > 1 ? 's' : ''}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="checkbox"
+                          id="linkPreviewMsg"
+                          checked={linkPreview}
+                          onChange={(e) => setLinkPreview(e.target.checked)}
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <label htmlFor="linkPreviewMsg" className="text-xs text-blue-700 dark:text-blue-300 cursor-pointer">
+                          Mostrar vista previa
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2 mt-2">
                   <Button
                     variant="outline"
@@ -169,6 +211,18 @@ export default function MessagesPage() {
                     Preview de links
                   </Button>
                 </div>
+              </div>
+
+              {/* Archivo adjunto */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Archivo adjunto (opcional)
+                </label>
+                <FileUploader
+                  onFileSelect={setFile}
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+                  maxSize={50}
+                />
               </div>
 
               {/* Preview de link */}
@@ -203,7 +257,7 @@ export default function MessagesPage() {
                 className="w-full"
                 size="lg"
                 onClick={handleSend}
-                disabled={loading || !message || (mode !== 'bulk' && !chatId) || (mode === 'bulk' && !recipients)}
+                disabled={loading || (!message && !file) || (mode !== 'bulk' && !chatId) || (mode === 'bulk' && !recipients)}
               >
                 {loading ? (
                   <>
@@ -213,7 +267,10 @@ export default function MessagesPage() {
                 ) : (
                   <>
                     <Send className="w-4 h-4 mr-2" />
-                    Enviar {mode === 'bulk' ? 'mensajes masivos' : 'mensaje'}
+                    {file
+                      ? `Enviar ${mode === 'bulk' ? 'mensajes' : 'mensaje'} con archivo`
+                      : `Enviar ${mode === 'bulk' ? 'mensajes masivos' : 'mensaje'}`
+                    }
                   </>
                 )}
               </Button>

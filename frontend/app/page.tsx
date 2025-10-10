@@ -3,9 +3,9 @@
 import { useSocket } from '@/hooks/useSocket'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
-import { MessageSquare, Users, BarChart3, Radio } from 'lucide-react'
+import { Header } from '@/components/Header'
+import { MessageSquare, Users, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
-import { Badge } from '@/components/Badge'
 
 export default function HomePage() {
   const { status, isConnected } = useSocket()
@@ -36,30 +36,9 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+      <Header />
+
       <div className="container mx-auto px-4 py-8">
-        <header className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                WhatsApp Manager
-              </h1>
-              <p className="text-gray-600 dark:text-gray-300">
-                Administra tus grupos y canales de WhatsApp
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Badge variant={isConnected ? 'success' : 'destructive'}>
-                <Radio className={`w-3 h-3 mr-1 ${isConnected ? 'animate-pulse' : ''}`} />
-                {isConnected ? 'Conectado' : 'Desconectado'}
-              </Badge>
-              {status.isReady && (
-                <Badge variant="success">
-                  WhatsApp Listo
-                </Badge>
-              )}
-            </div>
-          </div>
-        </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {features.map((feature) => (
