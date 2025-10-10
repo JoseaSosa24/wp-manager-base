@@ -7,23 +7,46 @@ import { whatsappService } from '../services/WhatsAppService.js';
 import { linkPreviewService } from '../services/LinkPreviewService.js';
 import { Message } from '../models/Message.js';
 import { logger } from '../utils/logger.js';
+import { deleteFile } from '../middleware/upload.js';
+import path from 'path';
 
 export class MessageController {
   /**
    * Envía un mensaje individual
+   * Soporta archivos multimedia
    */
   static async sendMessage(req, res) {
+    let uploadedFilePath = null;
+
     try {
       const { chatId, message } = req.body;
 
-      if (!chatId || !message) {
+      if (!chatId) {
         return res.status(400).json({
           success: false,
-          error: 'chatId y message son requeridos'
+          error: 'chatId es requerido'
         });
       }
 
-      const result = await whatsappService.sendMessage(chatId, message);
+      // Preparar opciones
+      const options = {
+        linkPreview: req.body.linkPreview !== false
+      };
+
+      // Si hay archivo adjunto
+      if (req.file) {
+        uploadedFilePath = req.file.path;
+        options.mediaPath = uploadedFilePath;
+        options.mimetype = req.file.mimetype;
+        options.filename = req.file.originalname;
+      }
+
+      const result = await whatsappService.sendMessage(chatId, message || '', options);
+
+      // Eliminar archivo temporal
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
 
       // Incrementar estadísticas
       if (req.app.locals.stats) {
@@ -36,6 +59,11 @@ export class MessageController {
       });
     } catch (error) {
       logger.error('Error en sendMessage', error);
+
+      // Limpiar archivo en caso de error
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
 
       if (req.app.locals.stats) {
         req.app.locals.stats.incrementMessagesFailed();
@@ -50,19 +78,52 @@ export class MessageController {
 
   /**
    * Envía mensajes masivos
+   * Soporta archivos multimedia
    */
   static async sendBulkMessages(req, res) {
-    try {
-      const { recipients, message } = req.body;
+    let uploadedFilePath = null;
 
-      if (!recipients || !Array.isArray(recipients) || !message) {
+    try {
+      let { recipients, message } = req.body;
+
+      // Si recipients viene como string (desde FormData), parsearlo
+      if (typeof recipients === 'string') {
+        try {
+          recipients = JSON.parse(recipients);
+        } catch (e) {
+          return res.status(400).json({
+            success: false,
+            error: 'recipients debe ser un array válido'
+          });
+        }
+      }
+
+      if (!recipients || !Array.isArray(recipients)) {
         return res.status(400).json({
           success: false,
-          error: 'recipients (array) y message son requeridos'
+          error: 'recipients (array) es requerido'
         });
       }
 
-      const results = await whatsappService.sendBulkMessages(recipients, message);
+      // Preparar opciones
+      const options = {
+        linkPreview: req.body.linkPreview !== false
+      };
+
+      // Si hay archivo adjunto
+      if (req.file) {
+        uploadedFilePath = req.file.path;
+        options.mediaPath = uploadedFilePath;
+        options.mimetype = req.file.mimetype;
+        options.filename = req.file.originalname;
+      }
+
+      const results = await whatsappService.sendBulkMessages(recipients, message || '', options);
+
+      // Eliminar archivo temporal
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
 
       // Actualizar estadísticas
       if (req.app.locals.stats) {
@@ -90,6 +151,11 @@ export class MessageController {
     } catch (error) {
       logger.error('Error en sendBulkMessages', error);
 
+      // Limpiar archivo en caso de error
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
+
       res.status(500).json({
         success: false,
         error: error.message
@@ -99,19 +165,45 @@ export class MessageController {
 
   /**
    * Envía mensaje con mención a todos en un grupo
+   * Soporta archivos multimedia y opciones avanzadas
    */
   static async mentionAll(req, res) {
+    let uploadedFilePath = null;
+
     try {
       const { groupId, message } = req.body;
 
-      if (!groupId || !message) {
+      if (!groupId) {
         return res.status(400).json({
           success: false,
-          error: 'groupId y message son requeridos'
+          error: 'groupId es requerido'
         });
       }
 
-      const result = await whatsappService.mentionAllInGroup(groupId, message);
+      // Preparar opciones
+      // FormData envía strings, convertir a boolean
+      const linkPreviewValue = req.body.linkPreview === 'false' ? false : true;
+      const options = {
+        linkPreview: linkPreviewValue
+      };
+
+      // Si hay archivo adjunto
+      if (req.file) {
+        uploadedFilePath = req.file.path;
+        options.mediaPath = uploadedFilePath;
+        options.mimetype = req.file.mimetype;
+        options.filename = req.file.originalname;
+
+        logger.info(`Archivo recibido: ${req.file.originalname} (${req.file.mimetype})`);
+      }
+
+      // Enviar mensaje
+      const result = await whatsappService.mentionAllInGroup(groupId, message || '', options);
+
+      // Eliminar archivo temporal después de enviarlo
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
 
       if (req.app.locals.stats) {
         req.app.locals.stats.incrementMessagesSent();
@@ -123,6 +215,11 @@ export class MessageController {
       });
     } catch (error) {
       logger.error('Error en mentionAll', error);
+
+      // Limpiar archivo en caso de error
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
 
       if (req.app.locals.stats) {
         req.app.locals.stats.incrementMessagesFailed();
@@ -137,19 +234,40 @@ export class MessageController {
 
   /**
    * Envía mensaje a un canal
+   * Soporta archivos multimedia
    */
   static async sendToChannel(req, res) {
+    let uploadedFilePath = null;
+
     try {
       const { channelId, message } = req.body;
 
-      if (!channelId || !message) {
+      if (!channelId) {
         return res.status(400).json({
           success: false,
-          error: 'channelId y message son requeridos'
+          error: 'channelId es requerido'
         });
       }
 
-      const result = await whatsappService.sendToChannel(channelId, message);
+      // Preparar opciones
+      const options = {
+        linkPreview: req.body.linkPreview !== false
+      };
+
+      // Si hay archivo adjunto
+      if (req.file) {
+        uploadedFilePath = req.file.path;
+        options.mediaPath = uploadedFilePath;
+        options.mimetype = req.file.mimetype;
+        options.filename = req.file.originalname;
+      }
+
+      const result = await whatsappService.sendToChannel(channelId, message || '', options);
+
+      // Eliminar archivo temporal
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
 
       if (req.app.locals.stats) {
         req.app.locals.stats.incrementMessagesSent();
@@ -161,6 +279,11 @@ export class MessageController {
       });
     } catch (error) {
       logger.error('Error en sendToChannel', error);
+
+      // Limpiar archivo en caso de error
+      if (uploadedFilePath) {
+        deleteFile(uploadedFilePath);
+      }
 
       if (req.app.locals.stats) {
         req.app.locals.stats.incrementMessagesFailed();

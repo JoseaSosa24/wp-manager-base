@@ -4,10 +4,12 @@
  */
 
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
+const { Client, LocalAuth, MessageMedia } = pkg;
 import qrcode from 'qrcode';
 import { logger } from '../utils/logger.js';
 import { randomDelay } from '../utils/delay.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 class WhatsAppService {
   constructor() {
@@ -112,16 +114,43 @@ class WhatsAppService {
 
   /**
    * Envía un mensaje individual
+   * Soporta archivos multimedia y links con vista previa
    */
-  async sendMessage(chatId, message) {
+  async sendMessage(chatId, message, options = {}) {
     if (!this.isReady) {
       throw new Error('Cliente de WhatsApp no está listo');
     }
 
     try {
-      await this.client.sendMessage(chatId, message);
+      let media = null;
+
+      // Preparar media si existe
+      if (options.mediaPath) {
+        media = MessageMedia.fromFilePath(options.mediaPath);
+        logger.info(`Media cargada desde: ${options.mediaPath}`);
+      } else if (options.mediaUrl) {
+        media = await MessageMedia.fromUrl(options.mediaUrl);
+        logger.info(`Media cargada desde URL: ${options.mediaUrl}`);
+      } else if (options.mediaBase64 && options.mimetype) {
+        media = new MessageMedia(options.mimetype, options.mediaBase64, options.filename);
+        logger.info(`Media cargada desde base64`);
+      }
+
+      // Enviar mensaje
+      if (media) {
+        const sendOptions = {};
+        if (message) {
+          sendOptions.caption = message;
+        }
+        await this.client.sendMessage(chatId, media, sendOptions);
+      } else {
+        await this.client.sendMessage(chatId, message, {
+          linkPreview: options.linkPreview !== false
+        });
+      }
+
       logger.success(`Mensaje enviado a ${chatId}`);
-      return { success: true, chatId, message };
+      return { success: true, chatId, message, hasMedia: !!media };
     } catch (error) {
       logger.error(`Error enviando mensaje a ${chatId}`, error);
       throw error;
@@ -130,8 +159,9 @@ class WhatsAppService {
 
   /**
    * Envía mensajes masivos con delay entre cada uno
+   * Soporta archivos multimedia y links con vista previa
    */
-  async sendBulkMessages(recipients, message) {
+  async sendBulkMessages(recipients, message, options = {}) {
     if (!this.isReady) {
       throw new Error('Cliente de WhatsApp no está listo');
     }
@@ -140,7 +170,7 @@ class WhatsAppService {
 
     for (const recipient of recipients) {
       try {
-        await this.sendMessage(recipient, message);
+        await this.sendMessage(recipient, message, options);
         results.push({ recipient, success: true });
 
         // Delay aleatorio entre mensajes para evitar bloqueos
@@ -254,8 +284,9 @@ class WhatsAppService {
   /**
    * Menciona a todos los miembros de un grupo (optimizado para grupos grandes)
    * Utiliza estrategia de batching para grupos con +256 participantes
+   * Soporta archivos multimedia y links con vista previa
    */
-  async mentionAllInGroup(groupId, message) {
+  async mentionAllInGroup(groupId, message, options = {}) {
     if (!this.isReady) {
       throw new Error('Cliente de WhatsApp no está listo');
     }
@@ -282,16 +313,45 @@ class WhatsAppService {
 
       logger.info(`Mencionando silenciosamente a ${allMentions.length} participantes...`);
 
+      // Preparar media si existe
+      let media = null;
+      if (options.mediaPath) {
+        media = MessageMedia.fromFilePath(options.mediaPath);
+        logger.info(`Media cargada desde: ${options.mediaPath}`);
+      } else if (options.mediaUrl) {
+        media = await MessageMedia.fromUrl(options.mediaUrl);
+        logger.info(`Media cargada desde URL: ${options.mediaUrl}`);
+      } else if (options.mediaBase64 && options.mimetype) {
+        media = new MessageMedia(options.mimetype, options.mediaBase64, options.filename);
+        logger.info(`Media cargada desde base64`);
+      }
+
+      // Preparar opciones de envío
+      const sendOptions = {
+        mentions: allMentions.slice(0, MENTION_LIMIT),
+        linkPreview: options.linkPreview !== false // Por defecto true para links
+      };
+
+      // Agregar caption si hay media
+      if (media && message) {
+        sendOptions.caption = message;
+      }
+
       if (allMentions.length <= MENTION_LIMIT) {
         // Grupo pequeño: enviar en un solo mensaje
-        await chat.sendMessage(message, { mentions: allMentions });
+        if (media) {
+          await chat.sendMessage(media, sendOptions);
+        } else {
+          await chat.sendMessage(message, sendOptions);
+        }
         logger.success(`✓ Mención silenciosa enviada (${allMentions.length} notificados)`);
 
         return {
           success: true,
           groupId,
           mentionedCount: allMentions.length,
-          batches: 1
+          batches: 1,
+          hasMedia: !!media
         };
 
       } else {
@@ -304,7 +364,11 @@ class WhatsAppService {
         logger.info(`Dividiendo en ${chunks.length} lotes para ${allMentions.length} participantes`);
 
         // Enviar primer lote con el mensaje principal
-        await chat.sendMessage(message, { mentions: chunks[0] });
+        if (media) {
+          await chat.sendMessage(media, { ...sendOptions, mentions: chunks[0] });
+        } else {
+          await chat.sendMessage(message, { ...sendOptions, mentions: chunks[0] });
+        }
         logger.info(`✓ Lote 1/${chunks.length} enviado (${chunks[0].length} menciones)`);
 
         // Pequeña pausa para evitar rate limiting
@@ -327,7 +391,8 @@ class WhatsAppService {
           success: true,
           groupId,
           mentionedCount: allMentions.length,
-          batches: chunks.length
+          batches: chunks.length,
+          hasMedia: !!media
         };
       }
 
@@ -337,7 +402,19 @@ class WhatsAppService {
       // Fallback: enviar sin menciones
       try {
         const chat = await this.client.getChatById(groupId);
-        await chat.sendMessage(message);
+        if (options.mediaPath || options.mediaUrl || options.mediaBase64) {
+          let media;
+          if (options.mediaPath) {
+            media = MessageMedia.fromFilePath(options.mediaPath);
+          } else if (options.mediaUrl) {
+            media = await MessageMedia.fromUrl(options.mediaUrl);
+          } else {
+            media = new MessageMedia(options.mimetype, options.mediaBase64, options.filename);
+          }
+          await chat.sendMessage(media, { caption: message });
+        } else {
+          await chat.sendMessage(message, { linkPreview: options.linkPreview !== false });
+        }
         return {
           success: true,
           groupId,
@@ -353,17 +430,40 @@ class WhatsAppService {
 
   /**
    * Envía mensaje a un canal (Newsletter)
+   * Soporta archivos multimedia y links con vista previa
    */
-  async sendToChannel(channelId, message) {
+  async sendToChannel(channelId, message, options = {}) {
     if (!this.isReady) {
       throw new Error('Cliente de WhatsApp no está listo');
     }
 
     try {
-      // En WhatsApp Web.js, los canales se manejan como chats normales
-      await this.client.sendMessage(channelId, message);
+      let media = null;
+
+      // Preparar media si existe
+      if (options.mediaPath) {
+        media = MessageMedia.fromFilePath(options.mediaPath);
+      } else if (options.mediaUrl) {
+        media = await MessageMedia.fromUrl(options.mediaUrl);
+      } else if (options.mediaBase64 && options.mimetype) {
+        media = new MessageMedia(options.mimetype, options.mediaBase64, options.filename);
+      }
+
+      // Enviar mensaje
+      if (media) {
+        const sendOptions = {};
+        if (message) {
+          sendOptions.caption = message;
+        }
+        await this.client.sendMessage(channelId, media, sendOptions);
+      } else {
+        await this.client.sendMessage(channelId, message, {
+          linkPreview: options.linkPreview !== false
+        });
+      }
+
       logger.success(`Mensaje enviado al canal ${channelId}`);
-      return { success: true, channelId, message };
+      return { success: true, channelId, message, hasMedia: !!media };
     } catch (error) {
       logger.error(`Error enviando mensaje al canal ${channelId}`, error);
       throw error;
