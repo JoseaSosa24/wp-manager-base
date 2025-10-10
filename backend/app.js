@@ -15,6 +15,7 @@ import { logger } from './utils/logger.js';
 import messageRoutes from './routes/messageRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import statsRoutes from './routes/statsRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -35,6 +36,9 @@ app.use(express.urlencoded({ extended: true }));
 // Inicializar estadísticas en app.locals
 app.locals.stats = new Stats();
 
+// Hacer io accesible en las rutas
+app.set('io', io);
+
 // Health check
 app.get('/health', (req, res) => {
   const status = whatsappService.getStatus();
@@ -49,6 +53,7 @@ app.get('/health', (req, res) => {
 app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/auth', authRoutes);
 
 // Manejo de Socket.io
 io.on('connection', (socket) => {
