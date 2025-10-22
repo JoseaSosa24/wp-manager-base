@@ -283,7 +283,7 @@ class WhatsAppService {
 
   /**
    * Menciona a todos los miembros de un grupo (optimizado para grupos grandes)
-   * Utiliza estrategia de batching para grupos con +256 participantes
+   * Utiliza el método oficial de whatsapp-web.js con estrategias de batching
    * Soporta archivos multimedia y links con vista previa
    */
   async mentionAllInGroup(groupId, message, options = {}) {
@@ -305,126 +305,225 @@ class WhatsAppService {
         throw new Error('No se encontraron participantes en el grupo');
       }
 
-      // Construir todas las menciones
-      const allMentions = participants.map(p => `${p.id.user}@c.us`);
+      logger.info(`📋 Grupo con ${participants.length} participantes`);
 
-      // Límite de WhatsApp: ~256 menciones por mensaje
-      const MENTION_LIMIT = 250;
-
-      logger.info(`Mencionando silenciosamente a ${allMentions.length} participantes...`);
+      // Emitir inicio de progreso
+      if (this.io) {
+        this.io.emit('mention_progress', {
+          groupId,
+          status: 'started',
+          totalParticipants: participants.length,
+          progress: 0
+        });
+      }
 
       // Preparar media si existe
       let media = null;
       if (options.mediaPath) {
         media = MessageMedia.fromFilePath(options.mediaPath);
-        logger.info(`Media cargada desde: ${options.mediaPath}`);
+        logger.info(`📎 Media cargada desde: ${options.mediaPath}`);
       } else if (options.mediaUrl) {
         media = await MessageMedia.fromUrl(options.mediaUrl);
-        logger.info(`Media cargada desde URL: ${options.mediaUrl}`);
+        logger.info(`📎 Media cargada desde URL: ${options.mediaUrl}`);
       } else if (options.mediaBase64 && options.mimetype) {
         media = new MessageMedia(options.mimetype, options.mediaBase64, options.filename);
-        logger.info(`Media cargada desde base64`);
+        logger.info(`📎 Media cargada desde base64`);
       }
 
-      // Preparar opciones de envío
-      const sendOptions = {
-        mentions: allMentions.slice(0, MENTION_LIMIT),
-        linkPreview: options.linkPreview !== false // Por defecto true para links
-      };
+      // Configuración de batching basada en el tamaño del grupo
+      const BATCH_SIZE = 250; // Límite de WhatsApp
+      const needsBatching = participants.length > BATCH_SIZE;
 
-      // Agregar caption si hay media
-      if (media && message) {
-        sendOptions.caption = message;
-      }
-
-      if (allMentions.length <= MENTION_LIMIT) {
-        // Grupo pequeño: enviar en un solo mensaje
-        if (media) {
-          await chat.sendMessage(media, sendOptions);
-        } else {
-          await chat.sendMessage(message, sendOptions);
-        }
-        logger.success(`✓ Mención silenciosa enviada (${allMentions.length} notificados)`);
-
-        return {
-          success: true,
-          groupId,
-          mentionedCount: allMentions.length,
-          batches: 1,
-          hasMedia: !!media
-        };
-
+      if (!needsBatching) {
+        // MÉTODO SIMPLE: Grupos pequeños - un solo mensaje
+        return await this._sendSingleMention(chat, participants, message, media, options);
       } else {
-        // Grupo grande: dividir en lotes
-        const chunks = [];
-        for (let i = 0; i < allMentions.length; i += MENTION_LIMIT) {
-          chunks.push(allMentions.slice(i, i + MENTION_LIMIT));
-        }
-
-        logger.info(`Dividiendo en ${chunks.length} lotes para ${allMentions.length} participantes`);
-
-        // Enviar primer lote con el mensaje principal
-        if (media) {
-          await chat.sendMessage(media, { ...sendOptions, mentions: chunks[0] });
-        } else {
-          await chat.sendMessage(message, { ...sendOptions, mentions: chunks[0] });
-        }
-        logger.info(`✓ Lote 1/${chunks.length} enviado (${chunks[0].length} menciones)`);
-
-        // Pequeña pausa para evitar rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Enviar lotes restantes con mensaje vacío (solo notificaciones)
-        for (let i = 1; i < chunks.length; i++) {
-          await chat.sendMessage('', { mentions: chunks[i] });
-          logger.info(`✓ Lote ${i + 1}/${chunks.length} enviado (${chunks[i].length} menciones)`);
-
-          // Pausa entre lotes
-          if (i < chunks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-
-        logger.success(`✓ Mención silenciosa completada (${allMentions.length} notificados en ${chunks.length} lotes)`);
-
-        return {
-          success: true,
-          groupId,
-          mentionedCount: allMentions.length,
-          batches: chunks.length,
-          hasMedia: !!media
-        };
+        // MÉTODO BATCHING: Grupos grandes - múltiples mensajes
+        return await this._sendBatchedMentions(chat, participants, message, media, options, BATCH_SIZE);
       }
 
     } catch (error) {
-      logger.error(`Error mencionando a todos en grupo ${groupId}`, error);
+      logger.error(`❌ Error mencionando a todos en grupo ${groupId}`, error);
 
-      // Fallback: enviar sin menciones
-      try {
-        const chat = await this.client.getChatById(groupId);
-        if (options.mediaPath || options.mediaUrl || options.mediaBase64) {
-          let media;
-          if (options.mediaPath) {
-            media = MessageMedia.fromFilePath(options.mediaPath);
-          } else if (options.mediaUrl) {
-            media = await MessageMedia.fromUrl(options.mediaUrl);
-          } else {
-            media = new MessageMedia(options.mimetype, options.mediaBase64, options.filename);
-          }
-          await chat.sendMessage(media, { caption: message });
-        } else {
-          await chat.sendMessage(message, { linkPreview: options.linkPreview !== false });
-        }
-        return {
-          success: true,
+      // Emitir error
+      if (this.io) {
+        this.io.emit('mention_progress', {
           groupId,
-          mentionedCount: 0,
-          batches: 0,
-          warning: 'Enviado sin menciones (error en menciones)'
-        };
-      } catch (fallbackError) {
-        throw error;
+          status: 'error',
+          error: error.message
+        });
       }
+
+      throw error;
+    }
+  }
+
+
+  /**
+   * Envía menciones silenciosas en un solo mensaje
+   * Usado para grupos <= 250 participantes
+   */
+  async _sendSingleMention(chat, participants, message, media, options) {
+    try {
+      logger.info(`📨 Enviando mención silenciosa a ${participants.length} participantes...`);
+
+      const chatId = chat.id._serialized;
+
+      // Construir array de menciones usando strings (formato correcto)
+      const mentions = participants.map(p => p.id._serialized);
+
+      // MENCIONES SILENCIOSAS: Solo el mensaje, sin @usuario visible
+      const messageText = message || '';
+
+      // Delay aleatorio para simular comportamiento humano (anti-ban)
+      await randomDelay(1000, 2000);
+
+      // Enviar mensaje usando el método oficial
+      if (media) {
+        await this.client.sendMessage(chatId, media, {
+          caption: messageText,
+          mentions: mentions,
+          linkPreview: options.linkPreview !== false
+        });
+      } else {
+        await this.client.sendMessage(chatId, messageText, {
+          mentions: mentions,
+          linkPreview: options.linkPreview !== false
+        });
+      }
+
+      logger.success(`✅ Mención única enviada exitosamente (${mentions.length} usuarios)`);
+
+      // Emitir progreso completado
+      if (this.io) {
+        this.io.emit('mention_progress', {
+          groupId: chatId,
+          status: 'completed',
+          totalParticipants: participants.length,
+          mentionedCount: mentions.length,
+          progress: 100,
+          batches: 1
+        });
+      }
+
+      return {
+        success: true,
+        groupId: chatId,
+        mentionedCount: mentions.length,
+        batches: 1,
+        hasMedia: !!media,
+        strategy: 'single-message'
+      };
+
+    } catch (error) {
+      logger.error(`❌ Error en mención única: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Envía menciones silenciosas en múltiples mensajes (batching)
+   * Usado para grupos > 250 participantes
+   */
+  async _sendBatchedMentions(chat, participants, message, media, options, batchSize) {
+    try {
+      const totalBatches = Math.ceil(participants.length / batchSize);
+      logger.info(`📦 Enviando ${totalBatches} lotes de menciones silenciosas...`);
+
+      const chatId = chat.id._serialized;
+      let totalMentioned = 0;
+      let batchNumber = 0;
+
+      // Dividir participantes en lotes
+      for (let i = 0; i < participants.length; i += batchSize) {
+        batchNumber++;
+        const batch = participants.slice(i, i + batchSize);
+
+        logger.info(`📤 Enviando lote ${batchNumber}/${totalBatches} (${batch.length} usuarios)...`);
+
+        // Construir menciones para este lote usando strings
+        const mentions = batch.map(p => p.id._serialized);
+
+        // MENCIONES SILENCIOSAS: Mensaje natural sin marcadores automáticos
+        const batchMessage = message || '';
+
+        // Simular comportamiento humano con delays variables
+        if (batchNumber > 1) {
+          // Delay MUY largo entre lotes para parecer humano (8-15 segundos)
+          const delay = Math.random() * 7000 + 8000; // 8-15 segundos
+          logger.info(`⏳ Esperando ${Math.round(delay/1000)}s (simulando escritura humana)...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+
+          // Simular que el usuario está "escribiendo" (typing indicator)
+          try {
+            await chat.sendStateTyping();
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000)); // 1-3s typing
+          } catch (err) {
+            // Si no funciona, continuar igual
+          }
+        } else {
+          // Primer lote: delay corto
+          await randomDelay(1000, 2000);
+        }
+
+        // Enviar lote (solo el primer lote lleva media)
+        if (media && batchNumber === 1) {
+          await this.client.sendMessage(chatId, media, {
+            caption: batchMessage,
+            mentions: mentions,
+            linkPreview: options.linkPreview !== false
+          });
+        } else {
+          await this.client.sendMessage(chatId, batchMessage, {
+            mentions: mentions,
+            linkPreview: options.linkPreview !== false
+          });
+        }
+
+        totalMentioned += batch.length;
+
+        logger.success(`✅ Lote ${batchNumber}/${totalBatches} enviado (${batch.length} usuarios)`);
+
+        // Emitir progreso
+        if (this.io) {
+          this.io.emit('mention_progress', {
+            groupId: chat.id._serialized,
+            status: 'progress',
+            totalParticipants: participants.length,
+            mentionedCount: totalMentioned,
+            progress: Math.round((totalMentioned / participants.length) * 100),
+            currentBatch: batchNumber,
+            totalBatches: totalBatches
+          });
+        }
+      }
+
+      logger.success(`🎉 Todas las menciones enviadas (${totalMentioned} usuarios en ${totalBatches} lotes)`);
+
+      // Emitir progreso completado
+      if (this.io) {
+        this.io.emit('mention_progress', {
+          groupId: chat.id._serialized,
+          status: 'completed',
+          totalParticipants: participants.length,
+          mentionedCount: totalMentioned,
+          progress: 100,
+          batches: totalBatches
+        });
+      }
+
+      return {
+        success: true,
+        groupId: chat.id._serialized,
+        mentionedCount: totalMentioned,
+        batches: totalBatches,
+        hasMedia: !!media,
+        strategy: 'batched-messages'
+      };
+
+    } catch (error) {
+      logger.error(`❌ Error en menciones por lotes: ${error.message}`);
+      throw error;
     }
   }
 
