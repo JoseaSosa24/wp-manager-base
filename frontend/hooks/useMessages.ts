@@ -110,11 +110,19 @@ export const useMessages = () => {
       })
 
       const result = response.data.data
-      const successMsg = file
-        ? `Mensaje con archivo enviado a ${result.mentionedCount} participantes`
-        : `Mención enviada a ${result.mentionedCount} participantes`
 
-      toast.success(successMsg)
+      // Manejar mensaje cuando hay warning (fallback sin menciones)
+      if (result.warning && result.mentionedCount === 0) {
+        const warningMsg = file
+          ? `⚠️ Mensaje con archivo enviado al grupo (${result.warning})`
+          : `⚠️ Mensaje enviado al grupo (${result.warning})`
+        toast.success(warningMsg)
+      } else {
+        const successMsg = file
+          ? `Mensaje con archivo enviado a ${result.mentionedCount} participantes`
+          : `Mención enviada a ${result.mentionedCount} participantes`
+        toast.success(successMsg)
+      }
       return response.data
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Error al mencionar todos')

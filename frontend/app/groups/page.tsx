@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useGroups } from '@/hooks/useGroups'
 import { useMessages } from '@/hooks/useMessages'
+import { useMentionProgress } from '@/hooks/useMentionProgress'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
@@ -11,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/Badge'
 import { Header } from '@/components/Header'
 import { FileUploader } from '@/components/FileUploader'
+import { MentionProgressBar } from '@/components/MentionProgressBar'
 import { ArrowLeft, Users, Send, Loader2, AtSign, Link as LinkIcon, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { formatRelativeTime } from '@/utils/formatTime'
@@ -18,6 +20,7 @@ import { formatRelativeTime } from '@/utils/formatTime'
 export default function GroupsPage() {
   const { data: groups, isLoading, refetch } = useGroups()
   const { mentionAll, loading, getLinkPreview } = useMessages()
+  const { progress, resetProgress } = useMentionProgress()
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -48,18 +51,29 @@ export default function GroupsPage() {
       return // Necesita al menos mensaje o archivo
     }
 
-    await mentionAll({
-      groupId: selectedGroup,
-      message,
-      file,
-      linkPreview
-    })
+    // Resetear progreso previo
+    resetProgress()
 
-    setMessage('')
-    setFile(null)
-    setSelectedGroup(null)
-    setDetectedLinks([])
-    setPreview(null)
+    try {
+      await mentionAll({
+        groupId: selectedGroup,
+        message,
+        file,
+        linkPreview
+      })
+
+      // Solo limpiar si fue exitoso y completado
+      if (progress?.status === 'completed') {
+        setMessage('')
+        setFile(null)
+        setSelectedGroup(null)
+        setDetectedLinks([])
+        setPreview(null)
+      }
+    } catch (error) {
+      // El error ya se maneja en useMentionProgress
+      console.error('Error en mención:', error)
+    }
   }
 
   return (
@@ -254,10 +268,18 @@ export default function GroupsPage() {
                       />
                     </div>
 
+                    {/* Progress Bar */}
+                    {progress && (
+                      <MentionProgressBar
+                        progress={progress}
+                        groupName={groups?.find((g: any) => g.id === selectedGroup)?.name}
+                      />
+                    )}
+
                     <Button
                       className="w-full"
                       onClick={handleMentionAll}
-                      disabled={loading || (!message && !file)}
+                      disabled={loading || (!message && !file) || (progress?.status === 'started' || progress?.status === 'progress')}
                     >
                       {loading ? (
                         <>
