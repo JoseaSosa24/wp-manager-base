@@ -351,9 +351,13 @@ export class MessageController {
         const mentions = participants.map(p => p.id._serialized);
 
         if (mentions.length > 250) {
+          // Send the poll first
           result = await whatsappService.sendPoll(chatId, pollName, options);
-          await whatsappService.mentionAllInGroup(chatId, '', { mentions });
+
+          // Then send the mentions in batches with a message indicating the poll was sent
+          await whatsappService.mentionAllInGroup(chatId, `¡Se ha creado una nueva encuesta: "${pollName}"!`, {});
         } else {
+          // Send the poll with mentions
           result = await whatsappService.sendPoll(chatId, pollName, options, { mentions });
         }
       } else {
