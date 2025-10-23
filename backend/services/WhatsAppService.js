@@ -776,8 +776,8 @@ class WhatsAppService {
     }
   }
 
-  async sendPoll(chatId, pollName, pollOptions) {
-    logger.info('Sending poll with params', { chatId, pollName, pollOptions });
+  async sendPoll(chatId, pollName, pollOptions, options = {}) {
+    logger.info('Sending poll with params', { chatId, pollName, pollOptions, options });
     if (!this.isReady) {
       logger.error('WhatsApp client is not ready for sendPoll');
       throw new Error('Cliente de WhatsApp no está listo');
@@ -786,7 +786,7 @@ class WhatsAppService {
     try {
       const poll = new Poll(pollName, pollOptions);
       logger.info('Created new Poll object', poll);
-      await this.client.sendMessage(chatId, poll);
+      await this.client.sendMessage(chatId, poll, options);
       logger.success(`Encuesta enviada a ${chatId}`);
       return { success: true, chatId, pollName };
     } catch (error) {

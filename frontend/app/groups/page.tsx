@@ -34,6 +34,7 @@ export default function GroupsPage() {
   const [isCreatePollModalOpen, setCreatePollModalOpen] = useState(false)
   const [pollName, setPollName] = useState('')
   const [pollOptions, setPollOptions] = useState([{ name: '' }, { name: '' }])
+  const [mentionAllInPoll, setMentionAllInPoll] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
@@ -124,12 +125,14 @@ export default function GroupsPage() {
     await createPoll({
       chatId: selectedGroup,
       pollName,
-      pollOptions
+      pollOptions,
+      mentionAll: mentionAllInPoll
     })
 
     setCreatePollModalOpen(false)
     setPollName('')
     setPollOptions([{ name: '' }, { name: '' }])
+    setMentionAllInPoll(false)
   }
 
   const handlePollOptionChange = (index: number, value: string) => {
@@ -558,6 +561,18 @@ export default function GroupsPage() {
               <ListPlus className="w-4 h-4 mr-2" />
               Añadir opción
             </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="mentionAllInPoll"
+              checked={mentionAllInPoll}
+              onChange={(e) => setMentionAllInPoll(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+            />
+            <label htmlFor="mentionAllInPoll" className="text-sm cursor-pointer">
+              Mencionar a todos los participantes
+            </label>
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button variant="outline" onClick={() => setCreatePollModalOpen(false)}>

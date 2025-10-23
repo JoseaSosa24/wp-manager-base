@@ -31,6 +31,7 @@ interface CreatePollParams {
   chatId: string
   pollName: string
   pollOptions: { name: string }[]
+  mentionAll?: boolean
 }
 
 export const useMessages = () => {
@@ -138,13 +139,14 @@ export const useMessages = () => {
     }
   }
 
-  const createPoll = async ({ chatId, pollName, pollOptions }: CreatePollParams) => {
+  const createPoll = async ({ chatId, pollName, pollOptions, mentionAll }: CreatePollParams) => {
     setLoading(true)
     try {
       const response = await axios.post(`${API_URL}/api/messages/poll`, {
         chatId,
         pollName,
-        pollOptions
+        pollOptions,
+        mentionAll
       })
 
       toast.success('Encuesta creada correctamente')

@@ -329,7 +329,7 @@ export class MessageController {
   static async createPoll(req, res) {
     logger.info('Request received for createPoll', req.body);
     try {
-      const { chatId, pollName, pollOptions } = req.body;
+      const { chatId, pollName, pollOptions, mentionAll } = req.body;
 
       if (!chatId || !pollName || !pollOptions) {
         logger.error('Validation failed for createPoll', { chatId, pollName, pollOptions });
@@ -341,7 +341,24 @@ export class MessageController {
 
       const options = pollOptions.map(opt => opt.name);
 
-      const result = await whatsappService.sendPoll(chatId, pollName, options);
+      let result;
+      if (mentionAll) {
+        const chat = await whatsappService.client.getChatById(chatId);
+        if (!chat.isGroup) {
+          throw new Error('El chat especificado no es un grupo');
+        }
+        const participants = chat.participants || [];
+        const mentions = participants.map(p => p.id._serialized);
+
+        if (mentions.length > 250) {
+          result = await whatsappService.sendPoll(chatId, pollName, options);
+          await whatsappService.mentionAllInGroup(chatId, '', { mentions });
+        } else {
+          result = await whatsappService.sendPoll(chatId, pollName, options, { mentions });
+        }
+      } else {
+        result = await whatsappService.sendPoll(chatId, pollName, options);
+      }
 
       if (req.app.locals.stats) {
         req.app.locals.stats.incrementMessagesSent();
