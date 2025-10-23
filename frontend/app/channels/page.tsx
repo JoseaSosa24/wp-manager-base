@@ -141,21 +141,21 @@ export default function ChannelsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
       <Header />
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+      <div className="container mx-auto px-2 sm:px-4 py-6 sm:py-8">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             Mis Canales de WhatsApp
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm sm:text-base">
             Administra tus canales, envía mensajes, crea encuestas y comparte contenido con tu audiencia
           </p>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <Button
             onClick={() => setShowCreateModal(true)}
             size="lg"
-            className="group"
+            className="group w-full sm:w-auto"
           >
             <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform" />
             Crear Nuevo Canal

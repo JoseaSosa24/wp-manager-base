@@ -27,6 +27,12 @@ interface MentionAllParams {
   linkPreview?: boolean
 }
 
+interface CreatePollParams {
+  chatId: string
+  pollName: string
+  pollOptions: { name: string }[]
+}
+
 export const useMessages = () => {
   const [loading, setLoading] = useState(false)
 
@@ -132,6 +138,25 @@ export const useMessages = () => {
     }
   }
 
+  const createPoll = async ({ chatId, pollName, pollOptions }: CreatePollParams) => {
+    setLoading(true)
+    try {
+      const response = await axios.post(`${API_URL}/api/messages/poll`, {
+        chatId,
+        pollName,
+        pollOptions
+      })
+
+      toast.success('Encuesta creada correctamente')
+      return response.data
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Error al crear la encuesta')
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const sendToChannel = async ({ chatId: channelId, message, file, linkPreview = true }: SendMessageParams) => {
     setLoading(true)
     try {
@@ -179,6 +204,7 @@ export const useMessages = () => {
     sendMessage,
     sendBulkMessages,
     mentionAll,
+    createPoll,
     sendToChannel,
     getLinkPreview
   }

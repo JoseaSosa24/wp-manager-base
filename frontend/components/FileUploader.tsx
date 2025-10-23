@@ -1,8 +1,10 @@
 "use client"
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
+import { useDropzone } from 'react-dropzone'
 import { Upload, X, File, Image, Video, FileText, Paperclip } from 'lucide-react'
 import { Button } from './Button'
+import { cn } from '@/utils/cn'
 
 interface FileUploaderProps {
   onFileSelect: (file: File | null) => void
@@ -13,7 +15,7 @@ interface FileUploaderProps {
 
 export const FileUploader = ({
   onFileSelect,
-  accept = '*/*',
+  accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar',
   maxSize = 50,
   preview = true
 }: FileUploaderProps) => {
@@ -22,13 +24,9 @@ export const FileUploader = ({
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (!selectedFile) return
-
+  const handleFile = useCallback((selectedFile: File) => {
     setError(null)
 
-    // Validar tamaño
     if (selectedFile.size > maxSize * 1024 * 1024) {
       setError(`El archivo excede el tamaño máximo de ${maxSize}MB`)
       return
@@ -37,7 +35,6 @@ export const FileUploader = ({
     setFile(selectedFile)
     onFileSelect(selectedFile)
 
-    // Generar preview para imágenes y videos
     if (preview && selectedFile.type.startsWith('image/')) {
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -50,7 +47,19 @@ export const FileUploader = ({
     } else {
       setPreviewUrl(null)
     }
-  }
+  }, [maxSize, onFileSelect, preview])
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      handleFile(acceptedFiles[0])
+    }
+  }, [handleFile])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: accept.split(',').reduce((acc, type) => ({ ...acc, [type.trim()]: [] }), {}),
+    multiple: false
+  })
 
   const handleRemove = () => {
     setFile(null)
@@ -61,6 +70,28 @@ export const FileUploader = ({
       fileInputRef.current.value = ''
     }
   }
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            const blob = items[i].getAsFile()
+            if (blob) {
+              handleFile(blob as File)
+            }
+            break
+          }
+        }
+      }
+    }
+
+    document.addEventListener('paste', handlePaste)
+    return () => {
+      document.removeEventListener('paste', handlePaste)
+    }
+  }, [handleFile])
 
   const getFileIcon = (file: File) => {
     if (file.type.startsWith('image/')) return <Image className="w-5 h-5" />
@@ -82,15 +113,19 @@ export const FileUploader = ({
     <div className="space-y-3">
       {!file ? (
         <div
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-primary hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+          {...getRootProps()}
+          className={cn(
+            'border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-primary hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors',
+            isDragActive && 'border-primary bg-primary/10'
+          )}
         >
+          <input {...getInputProps()} ref={fileInputRef} />
           <Upload className="w-10 h-10 mx-auto mb-3 text-gray-400" />
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Haz clic para subir un archivo
+            {isDragActive ? 'Suelta el archivo aquí...' : 'Arrastra un archivo o haz clic para subir'}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Imágenes, videos, documentos (máx. {maxSize}MB)
+            O pega una imagen (máx. {maxSize}MB)
           </p>
         </div>
       ) : (
@@ -147,19 +182,11 @@ export const FileUploader = ({
         </div>
       )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={accept}
-        onChange={handleFileChange}
-        className="hidden"
-      />
-
       {file && (
         <Button
           variant="outline"
           size="sm"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => getRootProps().onClick?.({} as any)}
           className="w-full"
         >
           <Paperclip className="w-4 h-4 mr-2" />
