@@ -16,6 +16,7 @@ import messageRoutes from './routes/messageRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import statsRoutes from './routes/statsRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import channelRoutes from './routes/channelRoutes.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -54,6 +55,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/channels', channelRoutes);
 
 // Manejo de Socket.io
 io.on('connection', (socket) => {

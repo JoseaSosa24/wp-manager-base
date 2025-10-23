@@ -8,8 +8,6 @@ const { Client, LocalAuth, MessageMedia } = pkg;
 import qrcode from 'qrcode';
 import { logger } from '../utils/logger.js';
 import { randomDelay } from '../utils/delay.js';
-import fs from 'fs/promises';
-import path from 'path';
 
 class WhatsAppService {
   constructor() {
@@ -209,7 +207,8 @@ class WhatsAppService {
   }
 
   /**
-   * Obtiene todos los canales (newsletters)
+   * Obtiene SOLO los canales que administras (donde puedes enviar mensajes)
+   * Usa getChannels() oficial que retorna canales con permisos de admin
    */
   async getChannels() {
     if (!this.isReady) {
@@ -217,16 +216,223 @@ class WhatsAppService {
     }
 
     try {
-      const chats = await this.client.getChats();
-      const channels = chats.filter(chat => chat.id.server === 'newsletter');
+      // getChannels() retorna TODOS los canales (suscritos + administrados)
+      const allChannels = await this.client.getChannels();
 
-      return channels.map(channel => ({
+      logger.info(`📱 getChannels() retornó: ${allChannels.length} canales totales`);
+
+      // FILTRAR solo canales donde eres OWNER o ADMIN usando channelMetadata.membershipType
+      const adminChannels = allChannels.filter(channel => {
+        const membershipType = channel.channelMetadata?.membershipType || 'subscriber';
+        const isAdmin = membershipType === 'owner' || membershipType === 'admin';
+
+        logger.info(`   📢 ${channel.name}: membershipType=${membershipType}, isAdmin=${isAdmin}`);
+
+        return isAdmin;
+      });
+
+      logger.info(`🔍 Canales filtrados (OWNER/ADMIN): ${adminChannels.length}`);
+
+      // Mapear a nuestro formato con TODA la metadata
+      const mappedChannels = adminChannels.map(channel => {
+        const metadata = channel.channelMetadata || {};
+        const membershipType = metadata.membershipType || 'subscriber';
+        const isOwner = membershipType === 'owner';
+
+        return {
+          id: channel.id._serialized,
+          name: channel.name || 'Canal sin nombre',
+          description: channel.description || '',
+          isOwner: isOwner,
+          membershipType: membershipType, // owner, admin, subscriber
+          isSubscriber: true,
+          timestamp: channel.timestamp || Date.now(),
+          verified: metadata.verified || false,
+
+          // Metadata completa para el frontend
+          metadata: {
+            creationTime: metadata.creationTime,
+            inviteCode: metadata.inviteCode,
+            size: metadata.size || 0, // número de suscriptores
+            verified: metadata.verified || false,
+            privacy: metadata.privacy, // public, private
+            website: metadata.website,
+            adminCount: metadata.adminCount || 0,
+            suspended: metadata.suspended || false,
+            geosuspended: metadata.geosuspended || false,
+            terminated: metadata.terminated || false,
+            createdAtTs: metadata.createdAtTs
+          }
+        };
+      });
+
+      logger.success(`✅ Canales administrables retornados: ${mappedChannels.length}`);
+
+      if (mappedChannels.length > 0) {
+        logger.info(`   └─ Canales: ${mappedChannels.map(c => `${c.name} (${c.membershipType}, ${c.metadata.size} suscriptores)`).join(', ')}`);
+      } else {
+        logger.warning(`   └─ No administras ningún canal. Solo se muestran canales donde seas OWNER o ADMIN.`);
+      }
+
+      return mappedChannels;
+
+    } catch (error) {
+      logger.error('❌ Error obteniendo canales:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Crea un nuevo canal
+   */
+  async createChannel(title, options = {}) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      let createOptions = {};
+
+      // Agregar descripción si existe
+      if (options.description) {
+        createOptions.description = options.description;
+      }
+
+      // Agregar imagen si existe
+      if (options.mediaPath) {
+        createOptions.picture = MessageMedia.fromFilePath(options.mediaPath);
+      } else if (options.mediaBase64 && options.mimetype) {
+        createOptions.picture = new MessageMedia(options.mimetype, options.mediaBase64, options.filename);
+      }
+
+      const result = await this.client.createChannel(title, createOptions);
+
+      logger.success(`Canal creado: ${title}`);
+      return {
+        success: true,
+        channelId: result.nid || result,
+        title: result.title || title,
+        inviteLink: result.inviteLink,
+        createdAt: result.createdAt
+      };
+    } catch (error) {
+      logger.error(`Error creando canal ${title}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Busca canales públicos
+   */
+  async searchChannels(searchText, options = {}) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const searchOptions = {
+        searchText: searchText,
+        skipSubscribedNewsletters: options.skipSubscribed || false,
+        limit: options.limit || 50
+      };
+
+      // Agregar códigos de país si existen
+      if (options.countryCodes && Array.isArray(options.countryCodes)) {
+        searchOptions.countryCodes = options.countryCodes;
+      }
+
+      const results = await this.client.searchChannels(searchOptions);
+
+      return results.map(channel => ({
         id: channel.id._serialized,
         name: channel.name,
-        timestamp: channel.timestamp
+        description: channel.description || '',
+        verified: channel.verified || false,
+        subscriberCount: channel.subscriberCount || 0
       }));
     } catch (error) {
-      logger.error('Error obteniendo canales', error);
+      logger.error(`Error buscando canales: ${searchText}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Suscribirse a un canal
+   */
+  async subscribeToChannel(channelId) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const result = await this.client.subscribeToChannel(channelId);
+      logger.success(`Suscrito al canal ${channelId}`);
+      return { success: result, channelId };
+    } catch (error) {
+      logger.error(`Error suscribiéndose al canal ${channelId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Desuscribirse de un canal
+   */
+  async unsubscribeFromChannel(channelId, deleteLocal = false) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const result = await this.client.unsubscribeFromChannel(channelId, {
+        deleteLocalModels: deleteLocal
+      });
+      logger.success(`Desuscrito del canal ${channelId}`);
+      return { success: result, channelId, deleted: deleteLocal };
+    } catch (error) {
+      logger.error(`Error desuscribiéndose del canal ${channelId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina un canal (solo si eres el propietario)
+   */
+  async deleteChannel(channelId) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const result = await this.client.deleteChannel(channelId);
+      logger.success(`Canal eliminado: ${channelId}`);
+      return { success: result, channelId };
+    } catch (error) {
+      logger.error(`Error eliminando canal ${channelId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene un canal por código de invitación
+   */
+  async getChannelByInviteCode(inviteCode) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const channel = await this.client.getChannelByInviteCode(inviteCode);
+
+      return {
+        id: channel.id._serialized,
+        name: channel.name,
+        description: channel.description || '',
+        verified: channel.verified || false,
+        subscriberCount: channel.subscriberCount || 0,
+        isSubscriber: channel.isSubscriber || false
+      };
+    } catch (error) {
+      logger.error(`Error obteniendo canal por código ${inviteCode}`, error);
       throw error;
     }
   }
