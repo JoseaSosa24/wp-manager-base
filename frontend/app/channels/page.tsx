@@ -2,16 +2,20 @@
 
 import { useState } from 'react'
 import { useChannels, useCreateChannel, useSearchChannels, useSubscribeChannel, useUnsubscribeChannel, useDeleteChannel } from '@/hooks/useChannels'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/Card'
+import { Card, CardContent } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
 import { Textarea } from '@/components/Textarea'
-import { Badge } from '@/components/Badge'
 import { Header } from '@/components/Header'
 import { FileUploader } from '@/components/FileUploader'
 import { Modal } from '@/components/Modal'
-import { Radio, Loader2, Plus, Search, Trash2, Users, CheckCircle, XCircle, Crown, Sparkles } from 'lucide-react'
-import { formatRelativeTime } from '@/utils/formatTime'
+import { DataList, DataStack } from '@/components/DataList'
+import { EmptyState } from '@/components/EmptyState'
+import { SkeletonCard } from '@/components/Skeleton'
+import { DataControls } from '@/components/DataControls'
+import { ChannelListItem } from '@/components/ChannelListItem'
+import { Radio, Plus, Search, Loader2, Trash2, CheckCircle } from 'lucide-react'
+import { useMemo } from 'react'
 
 export default function ChannelsPage() {
   const { data: channels, isLoading, refetch } = useChannels()
@@ -26,12 +30,18 @@ export default function ChannelsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
 
+  // View mode y filtros
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [searchFilter, setSearchFilter] = useState('')
+  const [sortBy, setSortBy] = useState('name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
   // Formulario de creación
   const [newChannelTitle, setNewChannelTitle] = useState('')
   const [newChannelDescription, setNewChannelDescription] = useState('')
   const [newChannelImage, setNewChannelImage] = useState<File | null>(null)
 
-  // Búsqueda
+  // Búsqueda de canales públicos
   const [searchText, setSearchText] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
 
@@ -86,6 +96,47 @@ export default function ChannelsPage() {
   // Todos los canales retornados son administrados por el usuario
   const adminChannels = channels || []
 
+  // Filtrar y ordenar canales
+  const filteredAndSortedChannels = useMemo(() => {
+    let result = [...adminChannels]
+
+    // Filtrar por búsqueda
+    if (searchFilter) {
+      result = result.filter(channel =>
+        channel.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
+        channel.description.toLowerCase().includes(searchFilter.toLowerCase())
+      )
+    }
+
+    // Ordenar
+    result.sort((a, b) => {
+      let comparison = 0
+
+      switch (sortBy) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name)
+          break
+        case 'subscribers':
+          comparison = a.metadata.size - b.metadata.size
+          break
+        case 'date':
+          comparison = a.timestamp - b.timestamp
+          break
+        default:
+          comparison = 0
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+
+    return result
+  }, [adminChannels, searchFilter, sortBy, sortDirection])
+
+  const handleSortChange = (value: string, direction: 'asc' | 'desc') => {
+    setSortBy(value)
+    setSortDirection(direction)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
       <Header />
@@ -110,138 +161,74 @@ export default function ChannelsPage() {
             Crear Nuevo Canal
           </Button>
         </div>
-        <Card className="border-2">
-          <CardHeader className="bg-muted/30">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                    <Crown className="w-5 h-5 text-white" />
-                  </div>
-                  Mis Canales
-                </CardTitle>
-                <CardDescription className="mt-2 text-base">
-                  {adminChannels.length} canal{adminChannels.length !== 1 ? 'es' : ''} que administras
-                </CardDescription>
-              </div>
-              <Button onClick={() => refetch()} variant="outline" size="sm" className="gap-2">
-                <Sparkles className="w-4 h-4" />
-                Actualizar
-              </Button>
+        <DataList
+          title="Mis Canales"
+          description={`${filteredAndSortedChannels.length} de ${adminChannels.length} canal${adminChannels.length !== 1 ? 'es' : ''}`}
+          count={filteredAndSortedChannels.length}
+          isLoading={isLoading}
+          isEmpty={!isLoading && adminChannels.length === 0}
+          onRefresh={refetch}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          emptyState={
+            <EmptyState
+              icon={Radio}
+              title="No tienes canales"
+              description="Crea tu primer canal para empezar a compartir contenido con tu audiencia"
+              action={{
+                label: "Crear Nuevo Canal",
+                onClick: () => setShowCreateModal(true)
+              }}
+            />
+          }
+        >
+          {/* Controles de búsqueda y ordenamiento */}
+          {!isLoading && adminChannels.length > 0 && (
+            <div className="mb-4">
+              <DataControls
+                searchPlaceholder="Buscar canales..."
+                searchValue={searchFilter}
+                onSearchChange={setSearchFilter}
+                sortOptions={[
+                  { value: 'name', label: 'Nombre' },
+                  { value: 'subscribers', label: 'Suscriptores' },
+                  { value: 'date', label: 'Fecha de creación' }
+                ]}
+                sortValue={sortBy}
+                sortDirection={sortDirection}
+                onSortChange={handleSortChange}
+              />
             </div>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-                <p className="text-muted-foreground">Cargando canales...</p>
-              </div>
-            ) : adminChannels.length > 0 ? (
-              <div className="space-y-3">
-                {adminChannels.map((channel) => (
-                    <div
-                      key={channel.id}
-                      className="p-4 rounded-xl border-2 border-border hover:border-primary/30 hover:shadow-sm transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-                            <Radio className="w-6 h-6 text-primary-foreground" />
-                          </div>
+          )}
 
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h4 className="font-semibold text-base truncate">
-                                {channel.name}
-                              </h4>
-                              {channel.membershipType === 'owner' && (
-                                <Badge variant="default" className="text-xs">
-                                  <Crown className="w-3 h-3 mr-1" />
-                                  Propietario
-                                </Badge>
-                              )}
-                              {channel.membershipType === 'admin' && (
-                                <Badge variant="secondary" className="text-xs">
-                                  <Users className="w-3 h-3 mr-1" />
-                                  Administrador
-                                </Badge>
-                              )}
-                              {channel.verified && (
-                                <Badge variant="success" className="text-xs">
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                  Verificado
-                                </Badge>
-                              )}
-                              {channel.metadata.privacy === 'public' && (
-                                <Badge variant="outline" className="text-xs">
-                                  Público
-                                </Badge>
-                              )}
-                            </div>
-                            {channel.description && (
-                              <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
-                                {channel.description}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Users className="w-4 h-4" />
-                                {channel.metadata.size} suscriptores
-                              </span>
-                              {channel.metadata.adminCount > 1 && (
-                                <>
-                                  <span className="hidden sm:inline">•</span>
-                                  <span className="hidden sm:inline">
-                                    {channel.metadata.adminCount} admins
-                                  </span>
-                                </>
-                              )}
-                              <span className="hidden sm:inline">•</span>
-                              <span className="hidden sm:inline">
-                                {formatRelativeTime(channel.timestamp)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 ml-4">
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedChannelId(channel.id)
-                              setShowDeleteModal(true)
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                  <Crown className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <p className="text-muted-foreground font-medium mb-2">
-                  No administras ningún canal
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Crea tu primer canal para empezar a compartir contenido con tu audiencia
-                </p>
-                <Button
-                  onClick={() => setShowCreateModal(true)}
-                  size="lg"
-                >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Crear Mi Primer Canal
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {isLoading ? (
+            <DataStack>
+              {[1, 2, 3].map((i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </DataStack>
+          ) : filteredAndSortedChannels.length === 0 && searchFilter ? (
+            <EmptyState
+              icon={Search}
+              title="No se encontraron canales"
+              description={`No hay canales que coincidan con "${searchFilter}"`}
+            />
+          ) : (
+            <DataStack>
+              {filteredAndSortedChannels.map((channel) => (
+                <ChannelListItem
+                  key={channel.id}
+                  channel={channel}
+                  viewMode={viewMode}
+                  onDelete={(channelId) => {
+                    setSelectedChannelId(channelId)
+                    setShowDeleteModal(true)
+                  }}
+                />
+              ))}
+            </DataStack>
+          )}
+        </DataList>
       </div>
 
       {/* Modal Crear Canal */}
