@@ -4,7 +4,7 @@
  */
 
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth, MessageMedia } = pkg;
+const { Client, LocalAuth, MessageMedia, Poll } = pkg;
 import qrcode from 'qrcode';
 import { logger } from '../utils/logger.js';
 import { randomDelay } from '../utils/delay.js';
@@ -27,7 +27,8 @@ class WhatsAppService {
       authStrategy: new LocalAuth(),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
       }
     });
 
@@ -771,6 +772,25 @@ class WhatsAppService {
       return { success: true, channelId, message, hasMedia: !!media };
     } catch (error) {
       logger.error(`Error enviando mensaje al canal ${channelId}`, error);
+      throw error;
+    }
+  }
+
+  async sendPoll(chatId, pollName, pollOptions) {
+    logger.info('Sending poll with params', { chatId, pollName, pollOptions });
+    if (!this.isReady) {
+      logger.error('WhatsApp client is not ready for sendPoll');
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const poll = new Poll(pollName, pollOptions);
+      logger.info('Created new Poll object', poll);
+      await this.client.sendMessage(chatId, poll);
+      logger.success(`Encuesta enviada a ${chatId}`);
+      return { success: true, chatId, pollName };
+    } catch (error) {
+      logger.error(`Error enviando encuesta a ${chatId}`, error);
       throw error;
     }
   }

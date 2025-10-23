@@ -326,6 +326,45 @@ export class MessageController {
     }
   }
 
+  static async createPoll(req, res) {
+    logger.info('Request received for createPoll', req.body);
+    try {
+      const { chatId, pollName, pollOptions } = req.body;
+
+      if (!chatId || !pollName || !pollOptions) {
+        logger.error('Validation failed for createPoll', { chatId, pollName, pollOptions });
+        return res.status(400).json({
+          success: false,
+          error: 'chatId, pollName y pollOptions son requeridos'
+        });
+      }
+
+      const options = pollOptions.map(opt => opt.name);
+
+      const result = await whatsappService.sendPoll(chatId, pollName, options);
+
+      if (req.app.locals.stats) {
+        req.app.locals.stats.incrementMessagesSent();
+      }
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Error in createPoll', error);
+
+      if (req.app.locals.stats) {
+        req.app.locals.stats.incrementMessagesFailed();
+      }
+
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
   /**
    * Obtiene previews de todas las URLs en un texto
    */

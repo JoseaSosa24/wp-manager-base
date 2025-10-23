@@ -2,7 +2,7 @@
   "name": "whatsapp-manager",
   "version": "1.0.0",
   "description": "Administrador moderno de grupos y canales de WhatsApp",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.19.0",
   "scripts": {
     "dev:backend": "cd backend && pnpm run dev",
     "dev:frontend": "cd frontend && pnpm run dev",
@@ -23,5 +23,13 @@
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "ws": "^8.18.3",
+      "tar-fs": "^3.1.1",
+      "validator": "^13.15.15",
+      "puppeteer": "^24.26.0"
+    }
   }
 }
