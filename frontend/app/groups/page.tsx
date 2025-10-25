@@ -92,6 +92,7 @@ export default function GroupsPageNew() {
   // Send message from modal
   const handleSendFromModal = async (data: {
     message: string
+    messages?: string[] // Array de mensajes personalizados por lote
     file: File | null
     linkPreview: boolean
     mentionAll: boolean
@@ -102,6 +103,7 @@ export default function GroupsPageNew() {
       await mentionAll({
         groupId: modalGroupId,
         message: data.message,
+        messages: data.messages, // Pasar array de mensajes personalizados
         file: data.file,
         linkPreview: data.linkPreview
       })

@@ -23,6 +23,7 @@ interface BulkMessageParams {
 interface MentionAllParams {
   groupId: string
   message: string
+  messages?: string[] // Array de mensajes personalizados por lote
   file?: File | null
   linkPreview?: boolean
 }
@@ -98,13 +99,19 @@ export const useMessages = () => {
     }
   }
 
-  const mentionAll = async ({ groupId, message, file, linkPreview = true }: MentionAllParams) => {
+  const mentionAll = async ({ groupId, message, messages, file, linkPreview = true }: MentionAllParams) => {
     setLoading(true)
     try {
       const formData = new FormData()
       formData.append('groupId', groupId)
       formData.append('message', message || '')
       formData.append('linkPreview', linkPreview.toString())
+
+      // Agregar array de mensajes personalizados si existe
+      if (messages && messages.length > 0) {
+        formData.append('messages', JSON.stringify(messages))
+        console.log('📝 Enviando', messages.length, 'mensajes personalizados al backend')
+      }
 
       if (file) {
         formData.append('file', file)

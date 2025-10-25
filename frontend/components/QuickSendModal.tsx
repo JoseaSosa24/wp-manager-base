@@ -6,7 +6,7 @@ import { Button } from './Button'
 import { Textarea } from './Textarea'
 import { FileUploader } from './FileUploader'
 import { Card, CardContent, CardHeader, CardTitle } from './Card'
-import { MessageCircle, Loader2, AtSign, Link as LinkIcon, Send } from 'lucide-react'
+import { MessageCircle, Loader2, AtSign, Link as LinkIcon, Send, Users, AlertCircle } from 'lucide-react'
 
 interface QuickSendModalProps {
   isOpen: boolean
@@ -16,6 +16,7 @@ interface QuickSendModalProps {
   participantsCount: number
   onSendMessage: (data: {
     message: string
+    messages?: string[] // Array de mensajes por lote
     file: File | null
     linkPreview: boolean
     mentionAll: boolean
@@ -32,13 +33,29 @@ export function QuickSendModal({
   onSendMessage,
   onGetLinkPreview
 }: QuickSendModalProps) {
+  const BATCH_SIZE = 250
   const [message, setMessage] = useState('')
+  const [batchMessages, setBatchMessages] = useState<string[]>([])
   const [file, setFile] = useState<File | null>(null)
   const [mentionAll, setMentionAll] = useState(false)
   const [linkPreview, setLinkPreview] = useState(true)
   const [detectedLinks, setDetectedLinks] = useState<string[]>([])
   const [preview, setPreview] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [showBatchInputs, setShowBatchInputs] = useState(false)
+
+  // Calcular número de lotes cuando mentionAll está activado
+  const totalBatches = mentionAll ? Math.ceil(participantsCount / BATCH_SIZE) : 1
+
+  // Inicializar mensajes por lote cuando cambia mentionAll o totalBatches
+  useEffect(() => {
+    if (mentionAll && totalBatches > 1) {
+      // Inicializar array con el mensaje principal en todos los lotes
+      setBatchMessages(Array(totalBatches).fill(message))
+    } else {
+      setBatchMessages([])
+    }
+  }, [mentionAll, totalBatches, message])
 
   // Detectar links en el mensaje
   useEffect(() => {
@@ -59,6 +76,12 @@ export function QuickSendModal({
     }
   }
 
+  const handleBatchMessageChange = (index: number, value: string) => {
+    const newMessages = [...batchMessages]
+    newMessages[index] = value
+    setBatchMessages(newMessages)
+  }
+
   const handleSend = async () => {
     if (!message && !file) return
 
@@ -66,6 +89,7 @@ export function QuickSendModal({
     try {
       await onSendMessage({
         message,
+        messages: showBatchInputs && totalBatches > 1 ? batchMessages : undefined,
         file,
         linkPreview,
         mentionAll
@@ -73,8 +97,10 @@ export function QuickSendModal({
 
       // Reset form
       setMessage('')
+      setBatchMessages([])
       setFile(null)
       setMentionAll(false)
+      setShowBatchInputs(false)
       setDetectedLinks([])
       setPreview(null)
       onClose()
@@ -90,7 +116,7 @@ export function QuickSendModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Enviar Mensaje Rápido"
-      size="lg"
+      size={showBatchInputs ? "4xl" : "lg"}
     >
       <div className="space-y-4">
         {/* Group Info */}
@@ -220,6 +246,98 @@ export function QuickSendModal({
           </div>
           <AtSign className="w-5 h-5 text-primary flex-shrink-0" />
         </div>
+
+        {/* Batch Info - Mostrar cuando mentionAll está activado */}
+        {mentionAll && totalBatches > 1 && (
+          <div className="p-4 bg-warning/10 border border-warning/30 rounded-lg space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-sm mb-1">
+                  Envío en múltiples lotes
+                </p>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Este grupo tiene {participantsCount} participantes. El mensaje se enviará en{' '}
+                  <span className="font-semibold text-foreground">{totalBatches} lotes</span> de hasta {BATCH_SIZE} personas cada uno.
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {Array.from({ length: totalBatches }).map((_, i) => {
+                    const start = i * BATCH_SIZE + 1
+                    const end = Math.min((i + 1) * BATCH_SIZE, participantsCount)
+                    const count = end - start + 1
+                    return (
+                      <div key={i} className="flex items-center gap-2 p-2 bg-background rounded border">
+                        <Users className="w-3 h-3 text-muted-foreground" />
+                        <span className="font-medium">Lote {i + 1}:</span>
+                        <span className="text-muted-foreground">{count} personas</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Toggle para mensajes personalizados */}
+            <div className="pt-3 border-t border-warning/20">
+              <Button
+                variant={showBatchInputs ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowBatchInputs(!showBatchInputs)}
+                className="w-full"
+              >
+                {showBatchInputs ? '✓ Usar mensajes diferentes por lote' : '📝 Personalizar mensaje por lote'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Inputs personalizados por lote */}
+        {mentionAll && totalBatches > 1 && showBatchInputs && (
+          <div className="space-y-3 p-4 bg-muted/30 border rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold text-sm">Mensajes por lote</h4>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  // Copiar el mensaje principal a todos los lotes
+                  setBatchMessages(Array(totalBatches).fill(message))
+                }}
+                className="text-xs h-7"
+              >
+                Copiar mensaje base a todos
+              </Button>
+            </div>
+
+            {Array.from({ length: totalBatches }).map((_, i) => {
+              const start = i * BATCH_SIZE + 1
+              const end = Math.min((i + 1) * BATCH_SIZE, participantsCount)
+              const count = end - start + 1
+
+              return (
+                <div key={i} className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                      {i + 1}
+                    </span>
+                    Lote {i + 1} ({count} personas)
+                  </label>
+                  <Textarea
+                    placeholder={`Mensaje para lote ${i + 1}...`}
+                    value={batchMessages[i] || ''}
+                    onChange={(e) => handleBatchMessageChange(i, e.target.value)}
+                    rows={3}
+                    className="resize-none text-sm"
+                  />
+                </div>
+              )
+            })}
+
+            <p className="text-xs text-muted-foreground italic">
+              💡 Tip: Cada lote recibirá el mensaje personalizado que escribas arriba. Los links se preservarán automáticamente.
+            </p>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t">

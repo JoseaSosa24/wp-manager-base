@@ -629,13 +629,80 @@ class WhatsAppService {
   }
 
   /**
+   * Genera variaciones del mensaje para evitar spam
+   * Preserva links, emojis y contenido importante
+   * Si hay array de mensajes personalizados, usa esos en vez de generar variaciones
+   */
+  _generateMessageVariation(originalMessage, batchNumber, totalBatches, customMessages = null) {
+    // Si hay mensajes personalizados, usar el correspondiente al lote
+    if (customMessages && Array.isArray(customMessages) && customMessages[batchNumber - 1]) {
+      logger.info(`📝 Usando mensaje personalizado para lote ${batchNumber}`);
+      return customMessages[batchNumber - 1];
+    }
+
+    // Si solo hay 1 lote, devolver mensaje original
+    if (totalBatches === 1) return originalMessage;
+
+    // Extraer URLs del mensaje original
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = originalMessage.match(urlRegex) || [];
+
+    // Palabras de relleno para variar (elegir aleatoriamente)
+    const prefixes = [
+      '',
+      '👋 ',
+      '🔔 ',
+      'Hola! ',
+      'Hey! ',
+      '📢 '
+    ];
+
+    const suffixes = [
+      '',
+      ' ✨',
+      ' 👆',
+      ' 📌',
+      '',
+      ''
+    ];
+
+    // Para el primer lote, usar mensaje original
+    if (batchNumber === 1) {
+      return originalMessage;
+    }
+
+    // Para lotes siguientes, generar variaciones sutiles
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+
+    // Aplicar variación: agregar prefix/suffix aleatorios
+    let varied = prefix + originalMessage + suffix;
+
+    // Asegurar que los links se preservan exactamente
+    urls.forEach(url => {
+      if (!varied.includes(url)) {
+        varied = varied + '\n' + url;
+      }
+    });
+
+    return varied.trim();
+  }
+
+  /**
    * Envía menciones silenciosas en múltiples mensajes (batching)
    * Usado para grupos > 250 participantes
    */
   async _sendBatchedMentions(chat, participants, message, media, options, batchSize) {
     try {
       const totalBatches = Math.ceil(participants.length / batchSize);
-      logger.info(`📦 Enviando ${totalBatches} lotes de menciones silenciosas...`);
+      const customMessages = options.messages || null;
+
+      if (customMessages && customMessages.length > 0) {
+        logger.info(`📦 Enviando ${totalBatches} lotes con mensajes PERSONALIZADOS...`);
+        logger.info(`📝 Mensajes personalizados recibidos: ${customMessages.length}`);
+      } else {
+        logger.info(`📦 Enviando ${totalBatches} lotes con variaciones AUTOMÁTICAS...`);
+      }
 
       const chatId = chat.id._serialized;
       let totalMentioned = 0;
@@ -651,8 +718,20 @@ class WhatsAppService {
         // Construir menciones para este lote usando strings
         const mentions = batch.map(p => p.id._serialized);
 
-        // MENCIONES SILENCIOSAS: Mensaje natural sin marcadores automáticos
-        const batchMessage = message || '';
+        // GENERAR VARIACIÓN DEL MENSAJE para cada lote (o usar mensaje personalizado si existe)
+        const batchMessage = this._generateMessageVariation(message || '', batchNumber, totalBatches, customMessages);
+
+        // Log para ver qué tipo de mensaje se está usando
+        if (customMessages && customMessages[batchNumber - 1]) {
+          const preview = batchMessage.substring(0, 50) + (batchMessage.length > 50 ? '...' : '');
+          logger.info(`📝 Lote ${batchNumber}: Mensaje personalizado → "${preview}"`);
+        } else if (batchNumber > 1 && batchMessage !== message) {
+          const preview = batchMessage.substring(0, 50) + (batchMessage.length > 50 ? '...' : '');
+          logger.info(`🔄 Lote ${batchNumber}: Variación automática → "${preview}"`);
+        } else {
+          const preview = batchMessage.substring(0, 50) + (batchMessage.length > 50 ? '...' : '');
+          logger.info(`📨 Lote ${batchNumber}: Mensaje original → "${preview}"`);
+        }
 
         // Simular comportamiento humano con delays variables
         if (batchNumber > 1) {

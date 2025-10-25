@@ -166,12 +166,13 @@ export class MessageController {
   /**
    * Envía mensaje con mención a todos en un grupo
    * Soporta archivos multimedia y opciones avanzadas
+   * Soporta múltiples mensajes (uno por lote)
    */
   static async mentionAll(req, res) {
     let uploadedFilePath = null;
 
     try {
-      const { groupId, message } = req.body;
+      const { groupId, message, messages } = req.body;
 
       if (!groupId) {
         return res.status(400).json({
@@ -186,6 +187,18 @@ export class MessageController {
       const options = {
         linkPreview: linkPreviewValue
       };
+
+      // Si viene array de mensajes desde FormData, parsearlo
+      let batchMessages = null;
+      if (messages) {
+        try {
+          batchMessages = typeof messages === 'string' ? JSON.parse(messages) : messages;
+          logger.info(`📝 Recibido array de ${batchMessages.length} mensajes personalizados`);
+          options.messages = batchMessages;
+        } catch (e) {
+          logger.warning('Error parseando messages array, usando mensaje único');
+        }
+      }
 
       // Si hay archivo adjunto
       if (req.file) {
