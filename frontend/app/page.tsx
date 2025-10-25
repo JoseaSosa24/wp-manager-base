@@ -3,7 +3,6 @@
 import { useSocket } from '@/hooks/useSocket'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/Card'
 import { Button } from '@/components/Button'
-import { Header } from '@/components/Header'
 import { MessageSquare, Users, BarChart3, Sparkles, TrendingUp, Zap, ArrowRight, QrCode } from 'lucide-react'
 import Link from 'next/link'
 
@@ -42,8 +41,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-      <Header />
-
       <div className="container mx-auto px-4 py-12">
         <div className="mb-12 text-center animate-fade-in">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">

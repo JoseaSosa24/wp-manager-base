@@ -796,6 +796,277 @@ class WhatsAppService {
   }
 
   /**
+   * Sale de un grupo
+   */
+  async leaveGroup(groupId) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      await chat.leave();
+      logger.success(`Saliste del grupo ${groupId}`);
+      return { success: true, groupId };
+    } catch (error) {
+      logger.error(`Error saliendo del grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Añade participantes a un grupo
+   * @param {string} groupId - ID del grupo
+   * @param {string|string[]} participantIds - ID(s) del/los participante(s) (formato: [email protected])
+   */
+  async addParticipantsToGroup(groupId, participantIds) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      // Convertir a array si es un solo ID
+      const idsArray = Array.isArray(participantIds) ? participantIds : [participantIds];
+
+      // Añadir participantes
+      const result = await chat.addParticipants(idsArray, {
+        autoSendInviteV4: true,
+        comment: ''
+      });
+
+      logger.success(`Participantes añadidos al grupo ${groupId}: ${idsArray.length}`);
+      return {
+        success: true,
+        groupId,
+        addedCount: idsArray.length,
+        result
+      };
+    } catch (error) {
+      logger.error(`Error añadiendo participantes al grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina participantes de un grupo
+   * @param {string} groupId - ID del grupo
+   * @param {string[]} participantIds - Array de IDs de participantes
+   */
+  async removeParticipantsFromGroup(groupId, participantIds) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      // Asegurar que sea array
+      const idsArray = Array.isArray(participantIds) ? participantIds : [participantIds];
+
+      // Eliminar participantes
+      const result = await chat.removeParticipants(idsArray);
+
+      logger.success(`Participantes eliminados del grupo ${groupId}: ${idsArray.length}`);
+      return {
+        success: true,
+        groupId,
+        removedCount: idsArray.length,
+        result
+      };
+    } catch (error) {
+      logger.error(`Error eliminando participantes del grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Promociona participantes a administradores
+   * @param {string} groupId - ID del grupo
+   * @param {string[]} participantIds - Array de IDs de participantes
+   */
+  async promoteParticipants(groupId, participantIds) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      const idsArray = Array.isArray(participantIds) ? participantIds : [participantIds];
+      const result = await chat.promoteParticipants(idsArray);
+
+      logger.success(`Participantes promocionados a admin en grupo ${groupId}: ${idsArray.length}`);
+      return {
+        success: true,
+        groupId,
+        promotedCount: idsArray.length,
+        result
+      };
+    } catch (error) {
+      logger.error(`Error promocionando participantes en grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Degradar administradores a participantes regulares
+   * @param {string} groupId - ID del grupo
+   * @param {string[]} participantIds - Array de IDs de participantes
+   */
+  async demoteParticipants(groupId, participantIds) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      const idsArray = Array.isArray(participantIds) ? participantIds : [participantIds];
+      const result = await chat.demoteParticipants(idsArray);
+
+      logger.success(`Admins degradados a miembros en grupo ${groupId}: ${idsArray.length}`);
+      return {
+        success: true,
+        groupId,
+        demotedCount: idsArray.length,
+        result
+      };
+    } catch (error) {
+      logger.error(`Error degradando participantes en grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza la descripción de un grupo
+   */
+  async updateGroupDescription(groupId, description) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      const result = await chat.setDescription(description);
+      logger.success(`Descripción actualizada en grupo ${groupId}`);
+      return { success: result, groupId, description };
+    } catch (error) {
+      logger.error(`Error actualizando descripción del grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza el nombre de un grupo
+   */
+  async updateGroupName(groupId, name) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      const result = await chat.setSubject(name);
+      logger.success(`Nombre actualizado en grupo ${groupId}: ${name}`);
+      return { success: result, groupId, name };
+    } catch (error) {
+      logger.error(`Error actualizando nombre del grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene el código de invitación de un grupo
+   */
+  async getGroupInviteCode(groupId) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      const inviteCode = await chat.getInviteCode();
+      logger.success(`Código de invitación obtenido para grupo ${groupId}`);
+      return {
+        success: true,
+        groupId,
+        inviteCode,
+        inviteLink: `https://chat.whatsapp.com/${inviteCode}`
+      };
+    } catch (error) {
+      logger.error(`Error obteniendo código de invitación del grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Revoca el código de invitación actual y genera uno nuevo
+   */
+  async revokeGroupInviteCode(groupId) {
+    if (!this.isReady) {
+      throw new Error('Cliente de WhatsApp no está listo');
+    }
+
+    try {
+      const chat = await this.client.getChatById(groupId);
+
+      if (!chat.isGroup) {
+        throw new Error('El chat especificado no es un grupo');
+      }
+
+      const newInviteCode = await chat.revokeInvite();
+      logger.success(`Código de invitación revocado en grupo ${groupId}`);
+      return {
+        success: true,
+        groupId,
+        newInviteCode,
+        newInviteLink: `https://chat.whatsapp.com/${newInviteCode}`
+      };
+    } catch (error) {
+      logger.error(`Error revocando código de invitación del grupo ${groupId}`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Desconecta el cliente
    */
   async disconnect() {

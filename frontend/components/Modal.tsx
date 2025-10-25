@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react'
 import { Button } from './Button'
+import { cn } from '@/utils/cn'
 
 interface ModalProps {
   isOpen: boolean
@@ -10,10 +11,22 @@ interface ModalProps {
   description?: string
   children?: React.ReactNode
   footer?: React.ReactNode
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl'
 }
 
-export const Modal = ({ isOpen, onClose, title, description, children, footer }: ModalProps) => {
+export const Modal = ({ isOpen, onClose, title, description, children, footer, size = 'md' }: ModalProps) => {
   if (!isOpen) return null
+
+  const sizeClasses = {
+    sm: 'max-w-sm',
+    md: 'max-w-md',
+    lg: 'max-w-lg',
+    xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl'
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -24,7 +37,10 @@ export const Modal = ({ isOpen, onClose, title, description, children, footer }:
       />
 
       {/* Modal */}
-      <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+      <div className={cn(
+        "relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full mx-4 overflow-hidden max-h-[90vh] flex flex-col",
+        sizeClasses[size]
+      )}>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div>
@@ -47,7 +63,7 @@ export const Modal = ({ isOpen, onClose, title, description, children, footer }:
 
         {/* Content */}
         {children && (
-          <div className="p-6">
+          <div className="p-6 overflow-y-auto flex-1">
             {children}
           </div>
         )}

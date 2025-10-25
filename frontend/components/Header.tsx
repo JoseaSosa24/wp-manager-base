@@ -3,82 +3,113 @@
 import { useSocket } from '@/hooks/useSocket'
 import { Badge } from './Badge'
 import { UserMenu } from './UserMenu'
-import { Radio, MessageSquare, Users, BarChart3, Home } from 'lucide-react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { Radio, Bell, Settings, Search } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/Tooltip'
+import { Button } from './Button'
+import { cn } from '@/utils/cn'
 
 export const Header = () => {
   const { status, isConnected } = useSocket()
-  const pathname = usePathname()
-
-  const navItems = [
-    { href: '/', label: 'Inicio', icon: Home },
-    { href: '/messages', label: 'Mensajes', icon: MessageSquare },
-    { href: '/groups', label: 'Grupos', icon: Users },
-    { href: '/channels', label: 'Canales', icon: Radio },
-    { href: '/stats', label: 'Estadísticas', icon: BarChart3 }
-  ]
 
   return (
-    <header className="glass sticky top-0 z-50 border-b">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
-                <MessageSquare className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                  WhatsApp Manager
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  Gestión profesional de mensajes
-                </p>
-              </div>
-            </Link>
+    <header className="glass sticky top-0 z-30 border-b backdrop-blur-lg bg-background/80">
+      <div className="container mx-auto px-4 lg:px-6">
+        <div className="h-16 flex items-center justify-between gap-4">
+          {/* Left Section - Spacer for Sidebar on Desktop */}
+          <div className="flex-1 lg:flex-none lg:w-20" />
 
-            <nav className="hidden md:flex items-center gap-2">
-              {navItems.map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`
-                      flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
-                      ${isActive
-                        ? 'bg-primary text-primary-foreground shadow-md'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-secondary-foreground'
-                      }
-                    `}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </Link>
-                )
-              })}
-            </nav>
+          {/* Center Section - Search (optional) */}
+          <div className="hidden md:flex flex-1 max-w-md">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar grupos, canales..."
+                className="w-full h-9 pl-9 pr-4 rounded-lg border bg-background/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Badge
-              variant={isConnected ? 'success' : 'destructive'}
-              className="hidden sm:flex"
-            >
-              <Radio className={`w-3 h-3 mr-1.5 ${isConnected ? 'animate-pulse' : ''}`} />
-              {isConnected ? 'Conectado' : 'Desconectado'}
-            </Badge>
+          {/* Right Section - Status & Actions */}
+          <div className="flex items-center gap-2">
+            <TooltipProvider delayDuration={300}>
+              {/* Connection Status */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "relative h-9 w-9 p-0",
+                      isConnected && "text-success"
+                    )}
+                  >
+                    <Radio className={cn(
+                      "w-4 h-4",
+                      isConnected && "animate-pulse"
+                    )} />
+                    {isConnected && (
+                      <span className="absolute top-1 right-1 w-2 h-2 bg-success rounded-full border-2 border-background" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={8} className="text-xs py-1 px-2">
+                  <p className="font-medium">
+                    {isConnected ? 'WhatsApp Conectado' : 'WhatsApp Desconectado'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {status.isReady ? 'Listo para enviar' : 'Esperando conexión'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
 
+              {/* Notifications */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="relative h-9 w-9 p-0"
+                  >
+                    <Bell className="w-4 h-4" />
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={8} className="text-xs py-1 px-2">
+                  <p className="font-medium">Notificaciones</p>
+                  <p className="text-xs text-muted-foreground">3 mensajes pendientes</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Settings */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 w-9 p-0"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={8} className="text-xs py-1 px-2">
+                  <p className="font-medium">Configuración</p>
+                  <p className="text-xs text-muted-foreground">Ajustes del sistema</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* User Menu */}
             {status.isReady && (
-              <Badge variant="success" className="hidden sm:flex">
-                WhatsApp Listo
-              </Badge>
+              <div className="ml-2 pl-2 border-l">
+                <UserMenu />
+              </div>
             )}
-
-            {status.isReady && <UserMenu />}
           </div>
         </div>
       </div>
